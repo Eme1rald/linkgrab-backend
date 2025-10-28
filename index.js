@@ -1,49 +1,44 @@
 // index.js
-const express = require("express");
-const cors = require("cors");
-const { spawn } = require("child_process");
+import express from "express";
+import cors from "cors";
+import { exec } from "child_process";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 🟢 Root route
 app.get("/", (req, res) => {
-  res.send("✅ LinkGrab backend is running fine!");
+  res.send("✅ LinkGrab backend is up and running!");
 });
 
-// 🟠 Replace your old /api/convert route with this:
-app.post("/api/convert", (req, res) => {
+app.post("/api/convert", async (req, res) => {
   const { url, format } = req.body;
 
-  if (!url) return res.status(400).json({ error: "YouTube URL is required" });
-  if (!["mp3", "mp4"].includes(format))
-    return res.status(400).json({ error: "Invalid format. Use mp3 or mp4" });
+  if (!url) return res.status(400).json({ error: "URL is required" });
 
-  res.setHeader("Content-Disposition", `attachment; filename="video.${format}"`);
+  const output = path.join(__dirname, `output.${format || "mp3"}`);
+  const command = `yt-dlp -f bestaudio --extract-audio --audio-format ${format || "mp3"} -o "${output}" "${url}"`;
 
-  // use yt-dlp directly from system
-  const args =
-    format === "mp3"
-      ? ["-x", "--audio-format", "mp3", "-o", "-", url]
-      : ["-f", "mp4", "-o", "-", url];
+  console.log("▶️ Running:", command);
 
-  const yt = spawn("yt-dlp", args);
-
-  yt.stdout.pipe(res); // stream directly to response
-
-  yt.stderr.on("data", (data) => {
-    console.log(`yt-dlp: ${data}`);
-  });
-
-  yt.on("close", (code) => {
-    if (code !== 0) {
-      console.error(`yt-dlp exited with code ${code}`);
-      res.end();
+  exec(command, (error, stdout, stderr) => {
+    if (error) {
+      console.error("❌ Error:", stderr);
+      return res.status(500).json({ error: "Download failed" });
     }
+
+    console.log("✅ Download completed");
+    res.download(output, (err) => {
+      fs.unlinkSync(output); // delete file after sending
+    });
   });
 });
 
-// 🟢 Start the server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
