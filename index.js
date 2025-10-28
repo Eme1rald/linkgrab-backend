@@ -4,6 +4,7 @@ const cors = require("cors");
 const ytdlp = require("yt-dlp-exec");
 const path = require("path");
 const fs = require("fs");
+const ffmpegPath = require("ffmpeg-static");
 
 const app = express();
 app.use(cors());
@@ -16,10 +17,7 @@ app.get("/", (req, res) => {
 app.post("/api/convert", async (req, res) => {
   try {
     const { url, format } = req.body;
-
-    if (!url) {
-      return res.status(400).json({ error: "URL is required" });
-    }
+    if (!url) return res.status(400).json({ error: "URL is required" });
 
     const outputFile = path.resolve(`output.${format || "mp3"}`);
 
@@ -27,15 +25,17 @@ app.post("/api/convert", async (req, res) => {
       output: outputFile,
       extractAudio: true,
       audioFormat: format || "mp3",
-      ffmpegLocation: require("ffmpeg-static"),
+      ffmpegLocation: ffmpegPath,
     });
 
     const fileData = fs.readFileSync(outputFile);
     res.setHeader("Content-Type", "audio/mpeg");
-    res.setHeader("Content-Disposition", `attachment; filename="output.${format || "mp3"}"`);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="output.${format || "mp3"}"`
+    );
     res.send(fileData);
 
-    // cleanup
     fs.unlinkSync(outputFile);
   } catch (err) {
     console.error("Error:", err);
