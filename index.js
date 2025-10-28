@@ -1,19 +1,18 @@
-// index.js - LinkGrab Backend with convert route
+// index.js
 const express = require("express");
 const cors = require("cors");
-const { exec } = require("child_process");
-const fs = require("fs");
-const path = require("path");
+const { spawn } = require("child_process");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
+// 🟢 Root route
 app.get("/", (req, res) => {
-  res.send("✅ LinkGrab backend is running");
+  res.send("✅ LinkGrab backend is running fine!");
 });
 
-// --- Conversion route ---
+// 🟠 Replace your old /api/convert route with this:
 app.post("/api/convert", (req, res) => {
   const { url, format } = req.body;
 
@@ -21,25 +20,30 @@ app.post("/api/convert", (req, res) => {
   if (!["mp3", "mp4"].includes(format))
     return res.status(400).json({ error: "Invalid format. Use mp3 or mp4" });
 
-  const outputFile = path.join(__dirname, `output.${format}`);
-  const command =
+  res.setHeader("Content-Disposition", `attachment; filename="video.${format}"`);
+
+  // use yt-dlp directly from system
+  const args =
     format === "mp3"
-      ? `yt-dlp -x --audio-format mp3 -o "${outputFile}" "${url}"`
-      : `yt-dlp -f mp4 -o "${outputFile}" "${url}"`;
+      ? ["-x", "--audio-format", "mp3", "-o", "-", url]
+      : ["-f", "mp4", "-o", "-", url];
 
-  exec(command, (error, stdout, stderr) => {
-    if (error) {
-      console.error(stderr);
-      return res.status(500).json({ error: "Download failed", details: stderr });
+  const yt = spawn("yt-dlp", args);
+
+  yt.stdout.pipe(res); // stream directly to response
+
+  yt.stderr.on("data", (data) => {
+    console.log(`yt-dlp: ${data}`);
+  });
+
+  yt.on("close", (code) => {
+    if (code !== 0) {
+      console.error(`yt-dlp exited with code ${code}`);
+      res.end();
     }
-
-    // Send file to client
-    res.download(outputFile, (err) => {
-      if (err) console.error("File send error:", err);
-      fs.unlink(outputFile, () => {}); // cleanup after send
-    });
   });
 });
 
+// 🟢 Start the server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
